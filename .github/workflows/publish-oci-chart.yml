@@ -1,0 +1,62 @@
+name: Publish chart to ghcr.io (OCI)
+
+# Publishes this chart as an OCI artifact: oci://ghcr.io/<owner>/charts/harbor:<version>
+# Use it from Terraform / helm with
+#   repository = "oci://ghcr.io/<owner>/charts"   chart = "harbor"   version = "<version>"
+#
+# Trigger: push of a tag "chart-v<version>" (e.g. chart-v1.18.0-oidc.1) or manually with a version.
+# The chart's own Chart.yaml version (1.4.0-dev) is overridden with the given version.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Chart version to publish (semver, e.g. 1.18.0-oidc.1)"
+        required: true
+        type: string
+  push:
+    tags: ["chart-v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute version
+        id: v
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/chart-v* ]]; then
+            version="${GITHUB_REF_NAME#chart-v}"
+          else
+            version="${{ inputs.version }}"
+          fi
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "not a semver version: $version"; exit 1; }
+          owner=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "owner=${owner}" >> "$GITHUB_OUTPUT"
+
+      - uses: azure/setup-helm@v4
+
+      - name: Lint and render (web identity values)
+        run: |
+          helm lint .
+          helm template harbor . \
+            --set expose.type=clusterIP --set expose.tls.enabled=false --set externalURL=https://harbor.example \
+            --set persistence.imageChartStorage.type=s3 --set persistence.imageChartStorage.s3.bucket=b \
+            --set persistence.imageChartStorage.s3.webIdentity.enabled=true \
+            --set persistence.imageChartStorage.s3.webIdentity.roleArn=arn:aws:iam::123456789012:role/x \
+            | grep -q aws-oidc-token
+
+      - name: Package
+        run: helm package . --version "${{ steps.v.outputs.version }}" --app-version "${{ steps.v.outputs.version }}"
+
+      - name: Push to ghcr.io
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          helm push harbor-${{ steps.v.outputs.version }}.tgz oci://ghcr.io/${{ steps.v.outputs.owner }}/charts
+          echo "- oci://ghcr.io/${{ steps.v.outputs.owner }}/charts/harbor:${{ steps.v.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
