@@ -254,6 +254,18 @@ persistence:
       #multipartcopychunksize: "33554432"
       #multipartcopymaxconcurrency: 100
       #multipartcopythresholdsize: "33554432"
+      # OIDC workload identity federation (e.g. a cluster outside AWS whose
+      # service account issuer is registered as an IAM OIDC provider).
+      # Leave accesskey/secretkey/existingSecret unset when enabled.
+      webIdentity:
+        enabled: false
+        # IAM role to assume via sts:AssumeRoleWithWebIdentity
+        roleArn: ""
+        roleSessionName: harbor-registry
+        # audience of the projected service account token (must match the IAM OIDC provider)
+        audience: sts.amazonaws.com
+        expirationSeconds: 3600
+        mountPath: /var/run/secrets/aws-oidc
     swift:
       authurl: https://storage.myprovider.com/v3/auth
       username: username

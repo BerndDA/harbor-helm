@@ -169,6 +169,14 @@ spec:
               key: REGISTRY_STORAGE_OSS_ACCESSKEYSECRET
               optional: true
         {{- end}}
+        {{- if and (eq $type "s3") $storage.s3.webIdentity.enabled }}
+        - name: AWS_ROLE_ARN
+          value: {{ required "persistence.imageChartStorage.s3.webIdentity.roleArn is required" $storage.s3.webIdentity.roleArn | quote }}
+        - name: AWS_WEB_IDENTITY_TOKEN_FILE
+          value: {{ $storage.s3.webIdentity.mountPath }}/token
+        - name: AWS_ROLE_SESSION_NAME
+          value: {{ $storage.s3.webIdentity.roleSessionName | quote }}
+        {{- end }}
 {{- with .Values.registry.registry.extraEnvVars }}
 {{- toYaml . | nindent 8 }}
 {{- end }}
@@ -205,6 +213,11 @@ spec:
           mountPath: /etc/registry/pk.pem
           subPath: pk.pem
         {{- end }}
+        {{- end }}
+        {{- if and (eq $type "s3") $storage.s3.webIdentity.enabled }}
+        - name: aws-oidc-token
+          mountPath: {{ $storage.s3.webIdentity.mountPath }}
+          readOnly: true
         {{- end }}
         {{- if .Values.caBundleSecretName }}
 {{ include "harbor.caBundleVolumeMount" . | indent 8 }}
@@ -324,6 +337,14 @@ spec:
               key: REGISTRY_STORAGE_OSS_ACCESSKEYSECRET
               optional: true
         {{- end}}
+        {{- if and (eq $type "s3") $storage.s3.webIdentity.enabled }}
+        - name: AWS_ROLE_ARN
+          value: {{ required "persistence.imageChartStorage.s3.webIdentity.roleArn is required" $storage.s3.webIdentity.roleArn | quote }}
+        - name: AWS_WEB_IDENTITY_TOKEN_FILE
+          value: {{ $storage.s3.webIdentity.mountPath }}/token
+        - name: AWS_ROLE_SESSION_NAME
+          value: {{ $storage.s3.webIdentity.roleSessionName | quote }}
+        {{- end }}
 {{- with .Values.registry.controller.extraEnvVars }}
 {{- toYaml . | nindent 8 }}
 {{- end }}
@@ -352,6 +373,11 @@ spec:
         - name: gcs-key
           mountPath: /etc/registry/gcs-key.json
           subPath: gcs-key.json
+        {{- end }}
+        {{- if and (eq $type "s3") $storage.s3.webIdentity.enabled }}
+        - name: aws-oidc-token
+          mountPath: {{ $storage.s3.webIdentity.mountPath }}
+          readOnly: true
         {{- end }}
         {{- if .Values.caBundleSecretName }}
 {{ include "harbor.caBundleVolumeMount" . | indent 8 }}
@@ -408,6 +434,15 @@ spec:
             - key: CLOUDFRONT_KEY_DATA
               path: pk.pem
       {{- end }}
+      {{- end }}
+      {{- if and (eq $type "s3") $storage.s3.webIdentity.enabled }}
+      - name: aws-oidc-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              audience: {{ $storage.s3.webIdentity.audience }}
+              expirationSeconds: {{ $storage.s3.webIdentity.expirationSeconds }}
+              path: token
       {{- end }}
       {{- if .Values.caBundleSecretName }}
 {{ include "harbor.caBundleVolume" . | indent 6 }}

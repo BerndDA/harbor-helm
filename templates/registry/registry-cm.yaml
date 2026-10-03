@@ -171,9 +171,12 @@ data:
       redirect:
         disable: {{ $storage.disableredirect }}
     redis:
-      addr: {{ template "harbor.redis.addr" . }}
-      {{- if eq "redis+sentinel" (include "harbor.redis.scheme" .) }}
-      sentinelMasterSet: {{ template "harbor.redis.masterSet" . }}
+      addrs:
+      {{- range splitList "," (include "harbor.redis.addr" .) }}
+        - {{ . | trim | quote }}
+      {{- end }}
+      {{- if contains "+sentinel" (include "harbor.redis.scheme" .) }}
+      mastername: {{ template "harbor.redis.masterSet" . }}
       {{- end }}
       db: {{ template "harbor.redis.dbForRegistry" . }}
       username: {{ (include "harbor.redis.usernameForRegistry" .) | default "" | quote }}
@@ -181,11 +184,15 @@ data:
       readtimeout: 10s
       writetimeout: 10s
       dialtimeout: 10s
-      enableTLS: {{ template "harbor.redis.enableTLS" . }}
-      pool:
-        maxidle: 100
-        maxactive: 500
-        idletimeout: 60s
+      {{- if eq (include "harbor.redis.enableTLS" .) "true" }}
+      # distribution v3 enables redis TLS only when tls.* is set; trust the system CA bundle
+      tls:
+        rootcas:
+          - /etc/pki/tls/certs/ca-bundle.crt
+      {{- end }}
+      poolsize: 500
+      maxidleconns: 100
+      connmaxidletime: 60s
     http:
       addr: :{{ template "harbor.registry.containerPort" . }}
       relativeurls: {{ .Values.registry.relativeurls }}
@@ -212,9 +219,6 @@ data:
         path: /etc/registry/passwd
     validation:
       disabled: true
-    compatibility:
-      schema1:
-        enabled: true
 
     {{- if .Values.registry.middleware.enabled }}
     {{- $middleware := .Values.registry.middleware }}
